@@ -13,8 +13,11 @@ import Network.Wai
     Response,
     ResponseReceived,
     responseLBS,
+    rawPathInfo
   )
+import Data.ByteString (ByteString)
 import Network.Wai.Handler.Warp (run)
+import qualified Data.ByteString.Lazy as LBS
 
 -- Our "application" will respond to ALL incoming requests with a 200
 -- status code response and the message "Hello, World!"
@@ -36,12 +39,11 @@ import Network.Wai.Handler.Warp (run)
 -- what you need.
 --
 -- We've used the non-synonym version of the `Application` type below.
-app ::
-  Request ->
-  (Response -> IO ResponseReceived) ->
-  IO ResponseReceived
-app _ cb =
-  cb $ responseLBS status200 [] "Hello, World!"
+app :: Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
+app req cb = cb response
+  where
+    response = responseLBS status200 [] body
+    body = LBS.fromStrict $ "Hello, World! " <> rawPathInfo req
 
 -- We keep this main function here as it is useful to build your application as
 -- a library. The reasoning behind this is that when you come to do your
@@ -49,4 +51,6 @@ app _ cb =
 -- needing to worry about any initialisation code you've buried in your
 -- executable Main.hs.
 runApp :: IO ()
-runApp = run 8000 app
+runApp = do
+  putStrLn "\nListening at http://localhost:8000"
+  run 8000 app

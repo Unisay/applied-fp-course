@@ -1,3 +1,6 @@
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-dodgy-exports #-}
 
@@ -17,7 +20,8 @@ where
 
 import Data.ByteString (ByteString)
 import Data.Text (Text)
-
+import qualified Data.Text as Text
+import Network.HTTP.Types ( StdMethod(..))
 -- Working through the specification for our application, what are the
 -- types of requests we're going to handle?
 
@@ -45,12 +49,14 @@ import Data.Text (Text)
 -- for you:
 
 -- Topic
-newtype Topic = Topic Text
-  deriving (Show)
+newtype Topic = Topic {getTopic :: Text}
+  deriving stock (Show)
+  deriving newtype (Eq)
 
 -- CommentText
-newtype CommentText = CommentText Text
-  deriving (Show)
+newtype CommentText = CommentText { getCommentText :: Text }
+  deriving stock (Show)
+  deriving newtype (Eq)
 
 -- Using these convenient definitions, we can create the following constructors
 -- for our RqType:
@@ -59,6 +65,10 @@ newtype CommentText = CommentText Text
 -- ViewRq : Which needs the topic being requested.
 -- ListRq : Which doesn't need anything and lists all of the current topics.
 data RqType
+  = AddRq Topic CommentText
+  | ViewRq Topic
+  | ListRq
+  deriving (Show)
 
 -- Not everything goes according to plan, but it's important that our types
 -- reflect when errors can be introduced into our program. Additionally it's
@@ -66,6 +76,10 @@ data RqType
 
 -- Fill in the error constructors as you need them.
 data Error
+  = EmptyTopic
+  | EmptyComment
+  | ResourceNotFound StdMethod [Text]
+  | UnsupportedMethod ByteString
 
 -- Provide the constructors for a sum type to specify the `ContentType` Header,
 -- to be used when we build our Response type. Our application will be simple,
@@ -74,6 +88,9 @@ data Error
 -- - plain text
 -- - json
 data ContentType
+  = JsonContent
+  | PlainTextContent
+  deriving (Eq, Show)
 
 -- The ``ContentType`` constructors don't match what is required for the header
 -- information. Because ``wai`` uses a stringly type. So write a function that
@@ -86,11 +103,10 @@ data ContentType
 -- - plain text = "text/plain"
 -- - json       = "application/json"
 --
-renderContentType ::
-  ContentType ->
-  ByteString
-renderContentType =
-  error "renderContentType not implemented"
+renderContentType :: ContentType -> ByteString
+renderContentType = \case
+  JsonContent -> "application/json"
+  PlainTextContent -> "text/plain"
 
 -- We can choose to *not* export the constructor for a data type and instead
 -- provide a function of our own. In our case, we're not interested in empty
@@ -100,27 +116,12 @@ renderContentType =
 -- The export list at the top of this file demonstrates how to export a type,
 -- but not export the constructor.
 
-mkTopic ::
-  Text ->
-  Either Error Topic
-mkTopic =
-  error "mkTopic not implemented"
+mkTopic :: Text -> Either Error Topic
+mkTopic topic | Text.null (Text.strip topic) = Left EmptyTopic
+mkTopic topic = Right (Topic topic)
 
-getTopic ::
-  Topic ->
-  Text
-getTopic =
-  error "getTopic not implemented"
+mkCommentText :: Text -> Either Error CommentText
+mkCommentText comment | Text.null (Text.strip comment) = Left EmptyComment
+mkCommentText comment = Right (CommentText comment)
 
-mkCommentText ::
-  Text ->
-  Either Error CommentText
-mkCommentText =
-  error "mkCommentText not implemented"
-
-getCommentText ::
-  CommentText ->
-  Text
-getCommentText =
-  error "getCommentText not implemented"
 ---- Go to `src/Level02/Core.hs` next
