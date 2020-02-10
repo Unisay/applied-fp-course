@@ -87,7 +87,7 @@ mkErrorResponse = \case
   EmptyTopic ->
     resp400 PlainTextContent "Topic is empty"
   EmptyComment ->
-    resp400 PlainTextContent "Comment is empty"
+    resp400 PlainTextContent "Empty Comment Text"
   ResourceNotFound method path ->
     resp404 PlainTextContent $
       LBS.concat

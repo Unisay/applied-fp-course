@@ -21,7 +21,8 @@ where
 import Data.ByteString (ByteString)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Network.HTTP.Types ( StdMethod(..))
+import Network.HTTP.Types (StdMethod (..))
+
 -- Working through the specification for our application, what are the
 -- types of requests we're going to handle?
 
@@ -54,7 +55,7 @@ newtype Topic = Topic {getTopic :: Text}
   deriving newtype (Eq)
 
 -- CommentText
-newtype CommentText = CommentText { getCommentText :: Text }
+newtype CommentText = CommentText {getCommentText :: Text}
   deriving stock (Show)
   deriving newtype (Eq)
 
@@ -123,5 +124,4 @@ mkTopic topic = Right (Topic topic)
 mkCommentText :: Text -> Either Error CommentText
 mkCommentText comment | Text.null (Text.strip comment) = Left EmptyComment
 mkCommentText comment = Right (CommentText comment)
-
 ---- Go to `src/Level02/Core.hs` next
