@@ -1,4 +1,8 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 module Level05.DB
   ( FirstAppDB (FirstAppDB),
@@ -23,7 +27,7 @@ import Database.SQLite.Simple
 import qualified Database.SQLite.Simple as Sql
 import qualified Database.SQLite.SimpleErrors as Sql
 import Database.SQLite.SimpleErrors.Types (SQLiteResponse)
-import Level05.AppM (AppM)
+import Level05.AppM (AppM, liftEither)
 import Level05.Types
   ( Comment,
     CommentText,
@@ -39,21 +43,13 @@ import Level05.Types
 -- our database queries. This also allows things to change over time without
 -- having to rewrite all of the functions that need to interact with DB related
 -- things in different ways.
-newtype FirstAppDB
-  = FirstAppDB
-      { dbConn :: Connection
-      }
+newtype FirstAppDB = FirstAppDB {dbConn :: Connection}
 
 -- Quick helper to pull the connection and close it down.
-closeDB ::
-  FirstAppDB ->
-  IO ()
-closeDB =
-  Sql.close . dbConn
+closeDB :: FirstAppDB -> IO ()
+closeDB = Sql.close . dbConn
 
-initDB ::
-  FilePath ->
-  IO (Either SQLiteResponse FirstAppDB)
+initDB :: FilePath -> IO (Either SQLiteResponse FirstAppDB)
 initDB fp = Sql.runDBAction $ do
   -- Initialise the connection to the DB...
   -- - What could go wrong here?
@@ -67,46 +63,39 @@ initDB fp = Sql.runDBAction $ do
     -- converted into a `Query` type when the `OverloadedStrings` language
     -- extension is enabled.
     createTableQ =
-      "CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, topic TEXT, comment TEXT, time INTEGER)"
+      "CREATE TABLE IF NOT EXISTS comments \
+      \(id INTEGER PRIMARY KEY, topic TEXT, comment TEXT, time INTEGER)"
 
-runDB ::
-  (a -> Either Error b) ->
-  IO a ->
-  AppM b
-runDB =
-  -- This function is intended to abstract away the running of DB functions and
-  -- the catching of any errors. As well as the process of running some
-  -- processing function over those results.
-  error "Write 'runDB' to match the type signature"
+runDB :: forall a b. (a -> Either Error b) -> IO a -> AppM b
+runDB f io = liftIO (first DBError <$> Sql.runDBAction io) >>= liftEither . (>>= f)
 
 -- Move your use of DB.runDBAction to this function to avoid repeating
 -- yourself in the various DB functions.
 
-getComments ::
-  FirstAppDB ->
-  Topic ->
-  AppM [Comment]
-getComments =
-  error "Copy your completed 'getComments' and refactor to match the new type signature"
+getComments :: FirstAppDB -> Topic -> AppM [Comment]
+getComments FirstAppDB {dbConn} topic =
+  runDB (traverse fromDBComment) $
+    Sql.query dbConn sql (Sql.Only $ getTopic topic)
+  where
+    sql = "SELECT id,topic,comment,time FROM comments WHERE topic = ?"
 
-addCommentToTopic ::
-  FirstAppDB ->
-  Topic ->
-  CommentText ->
-  AppM ()
-addCommentToTopic =
-  error "Copy your completed 'appCommentToTopic' and refactor to match the new type signature"
+addCommentToTopic :: FirstAppDB -> Topic -> CommentText -> AppM ()
+addCommentToTopic FirstAppDB {dbConn} topic comment =
+  liftIO getCurrentTime >>= runDB pure . db
+  where
+    db now = Sql.execute dbConn sql (mkArgs now)
+    sql = "INSERT INTO comments (topic,comment,time) VALUES (?,?,?)"
+    mkArgs now = (getTopic topic, getCommentText comment, now)
 
-getTopics ::
-  FirstAppDB ->
-  AppM [Topic]
-getTopics =
-  error "Copy your completed 'getTopics' and refactor to match the new type signature"
+getTopics :: FirstAppDB -> AppM [Topic]
+getTopics FirstAppDB {dbConn} =
+  runDB
+    (traverse $ mkTopic . Sql.fromOnly)
+    (Sql.query_ dbConn "SELECT DISTINCT topic FROM comments")
 
-deleteTopic ::
-  FirstAppDB ->
-  Topic ->
-  AppM ()
-deleteTopic =
-  error "Copy your completed 'deleteTopic' and refactor to match the new type signature"
+deleteTopic :: FirstAppDB -> Topic -> AppM ()
+deleteTopic FirstAppDB {dbConn} topic = runDB pure db
+  where
+    db = Sql.execute dbConn "DELETE FROM comments WHERE topic = ?" args
+    args = Sql.Only (getTopic topic)
 -- Go to 'src/Level05/Core.hs' next.
