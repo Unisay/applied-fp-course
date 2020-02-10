@@ -8,6 +8,7 @@ where
 
 import Data.Functor.Contravariant (contramap)
 import Data.Text (Text)
+import qualified Database.SQLite.Simple as Sql
 import Level04.Types.Error (Error (EmptyTopic), nonEmptyText)
 import Waargonaut.Encode (Encoder)
 import qualified Waargonaut.Encode as E
@@ -15,17 +16,14 @@ import qualified Waargonaut.Encode as E
 newtype Topic = Topic Text
   deriving (Show)
 
-mkTopic ::
-  Text ->
-  Either Error Topic
-mkTopic =
-  nonEmptyText Topic EmptyTopic
+instance Sql.FromRow Topic where
+  fromRow = Topic <$> Sql.field
 
-getTopic ::
-  Topic ->
-  Text
-getTopic (Topic t) =
-  t
+mkTopic :: Text -> Either Error Topic
+mkTopic = nonEmptyText Topic EmptyTopic
+
+getTopic :: Topic -> Text
+getTopic (Topic t) = t
 
 -- | We will use this function to describe how we would like our `Topic`
 -- type to be encoded into JSON.
@@ -58,6 +56,4 @@ getTopic (Topic t) =
 -- functions. There is a quick introduction to `Contravariant` in the `README`
 -- for this level.
 encodeTopic :: Applicative f => Encoder f Topic
-encodeTopic =
-  -- Try using 'contramap' and 'E.text'
-  error "topic JSON encoder not implemented"
+encodeTopic = contramap getTopic E.text

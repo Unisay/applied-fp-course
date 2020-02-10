@@ -1,6 +1,5 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Level04.Types
   ( Error (..),
@@ -15,35 +14,44 @@ module Level04.Types
     getCommentText,
     renderContentType,
     fromDBComment,
+    encodeComment,
+    encodeTopic,
   )
 where
 
 import Data.ByteString (ByteString)
-import Data.Functor.Contravariant ((>$<))
-import Data.List (stripPrefix)
-import Data.Maybe (fromMaybe)
-import Data.Text (Text, pack)
-import Data.Time (UTCTime)
-import qualified Data.Time.Format as TF
-import GHC.Generics (Generic)
-import Level04.DB.Types (DBComment)
 -- Notice how we've moved these types into their own modules. It's cheap and
 -- easy to add modules to carve out components in a Haskell application. So
 -- whenever you think that a module is too big, covers more than one piece of
 -- distinct functionality, or you want to carve out a particular piece of code,
 -- just spin up another module.
-import Level04.Types.CommentText
-  ( CommentText,
-    getCommentText,
-    mkCommentText,
-  )
-import Level04.Types.Error (Error (EmptyCommentText, EmptyTopic, UnknownRoute))
+
+import Data.Functor.Contravariant ((>$$<), (>$<))
+import Data.List (stripPrefix)
+import Data.Maybe (fromMaybe)
+import Data.Text (Text, pack)
+import qualified Data.Text as Text
+import Data.Time (UTCTime)
+import qualified Data.Time.Format as TF
+import GHC.Generics (Generic)
+import Level04.DB.Types (DBComment (..))
+import Level04.Types.CommentText (CommentText, getCommentText, mkCommentText)
+import Level04.Types.Error (Error (..))
 import Level04.Types.Topic (Topic, getTopic, mkTopic)
 import Waargonaut.Encode (Encoder)
 import qualified Waargonaut.Encode as E
 
 newtype CommentId = CommentId Int
   deriving (Eq, Show)
+
+encodeCommentId :: Applicative f => Encoder f CommentId
+encodeCommentId = E.int >$$< \(CommentId c) -> c
+
+encodeTopic :: Applicative f => Encoder f Topic
+encodeTopic = getTopic >$< E.text
+
+encodeCommentText :: Applicative f => Encoder f CommentText
+encodeCommentText = getCommentText >$< E.text
 
 -- | This is the `Comment` record that we will be sending to users, it's a
 -- straightforward record type, containing an `Int`, `Topic`, `CommentText`, and
@@ -63,8 +71,11 @@ data Comment
 --
 -- 'https://hackage.haskell.org/package/waargonaut/docs/Waargonaut-Encode.html'
 encodeComment :: Applicative f => Encoder f Comment
-encodeComment =
-  error "Comment JSON encoder not implemented"
+encodeComment = E.mapLikeObj $ \comment ->
+  E.atKey' "comment" encodeCommentId (commentId comment)
+    . E.atKey' "topic" encodeTopic (commentTopic comment)
+    . E.atKey' "body" encodeCommentText (commentBody comment)
+    . E.atKey' "time" encodeISO8601DateTime (commentTime comment)
 
 -- Tip: Use the 'encodeISO8601DateTime' to handle the UTCTime for us.
 
@@ -72,11 +83,16 @@ encodeComment =
 -- that we would be okay with showing someone. However unlikely it may be, this
 -- is a nice method for separating out the back and front end of a web app and
 -- providing greater guarantees about data cleanliness.
-fromDBComment ::
-  DBComment ->
-  Either Error Comment
-fromDBComment =
-  error "fromDBComment not yet implemented"
+fromDBComment :: DBComment -> Either Error Comment
+fromDBComment DBComment {..} = do
+  commentTopic <- mkTopic dbCommentTopic
+  commentBody <- mkCommentText dbCommentBody
+  return
+    Comment
+      { commentId = CommentId dbCommentId,
+        commentTime = dbCommentTime,
+        ..
+      }
 
 data RqType
   = AddRq Topic CommentText
@@ -87,9 +103,7 @@ data ContentType
   = PlainText
   | JSON
 
-renderContentType ::
-  ContentType ->
-  ByteString
+renderContentType :: ContentType -> ByteString
 renderContentType PlainText = "text/plain"
 renderContentType JSON = "application/json"
 
