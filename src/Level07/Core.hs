@@ -1,4 +1,6 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Level07.Core
   ( runApplication,
@@ -12,7 +14,7 @@ import qualified Control.Exception as Ex
 import Control.Monad (join)
 -- We're going to use the `mtl` ExceptT monad transformer to make the loading of
 -- our `Conf` a bit more straight-forward.
-import Control.Monad.Except (ExceptT (..), runExceptT)
+import Control.Monad.Except (ExceptT (..), runExceptT, withExceptT)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (asks)
 import Data.Bifunctor (first)
@@ -36,7 +38,7 @@ import qualified Level07.Conf as Conf
 import qualified Level07.DB as DB
 import qualified Level07.Responses as Res
 import Level07.Types
-  ( Conf,
+  ( Conf (dbFilePath),
     ConfigError,
     ContentType (PlainText),
     Error (..),
@@ -72,8 +74,7 @@ runApplication = do
   appE <- runExceptT prepareAppReqs
   either print runWithDBConn appE
   where
-    runWithDBConn env =
-      appWithDB env >> DB.closeDB (envDB env)
+    runWithDBConn env = appWithDB env >> DB.closeDB (envDB env)
     appWithDB env =
       Ex.finally
         (run (confPortToWai . envConfig $ env) (app env))
@@ -88,7 +89,10 @@ runApplication = do
 --
 -- 'mtl' on Hackage: https://hackage.haskell.org/package/mtl
 prepareAppReqs :: ExceptT StartUpError IO Env
-prepareAppReqs = error "prepareAppReqs not reimplemented with ExceptT"
+prepareAppReqs = do
+  envConfig <- withExceptT ConfErr (ExceptT (Conf.parseOptions "files/appconfig.json"))
+  envDB <- withExceptT DBInitErr . ExceptT . DB.initDB . dbFilePath $ envConfig
+  return Env {envLoggingFn = liftIO . print, ..}
 
 -- You may copy your previous implementation of this function and try refactoring it. On the
 -- condition you have to explain to the person next to you what you've done and why it works.
@@ -97,23 +101,20 @@ prepareAppReqs = error "prepareAppReqs not reimplemented with ExceptT"
 -- within our App context, we need to run the App to get our IO action out
 -- to be run and handed off to the callback function. We've already written
 -- the function for this so include the 'runApp' with the Env.
-app ::
-  Env ->
-  Application
-app =
-  error "Copy your completed 'app' from the previous level and refactor it here"
+app :: Env -> Application
+app env rq cb =
+  runApp (handleRequest =<< mkRequest rq) env >>= cb . handleRespErr
+  where
+    handleRespErr :: Either Error Response -> Response
+    handleRespErr = either mkErrorResponse id
 
-handleRequest ::
-  RqType ->
-  App Response
+handleRequest :: RqType -> App Response
 handleRequest rqType = case rqType of
   AddRq t c -> Res.resp200 PlainText "Success" <$ DB.addCommentToTopic t c
   ViewRq t -> Res.resp200Json (E.list encodeComment) <$> DB.getComments t
   ListRq -> Res.resp200Json (E.list encodeTopic) <$> DB.getTopics
 
-mkRequest ::
-  Request ->
-  App RqType
+mkRequest :: Request -> App RqType
 mkRequest rq =
   liftEither =<< case (pathInfo rq, requestMethod rq) of
     -- Commenting on a given topic
@@ -125,29 +126,17 @@ mkRequest rq =
     -- Finally we don't care about any other requests so throw your hands in the air
     _ -> pure (Left UnknownRoute)
 
-mkAddRequest ::
-  Text ->
-  LBS.ByteString ->
-  Either Error RqType
+mkAddRequest :: Text -> LBS.ByteString -> Either Error RqType
 mkAddRequest ti c =
-  AddRq
-    <$> mkTopic ti
-    <*> (mkCommentText . decodeUtf8 . LBS.toStrict) c
+  AddRq <$> mkTopic ti <*> (mkCommentText . decodeUtf8 . LBS.toStrict) c
 
-mkViewRequest ::
-  Text ->
-  Either Error RqType
-mkViewRequest =
-  fmap ViewRq . mkTopic
+mkViewRequest :: Text -> Either Error RqType
+mkViewRequest = fmap ViewRq . mkTopic
 
-mkListRequest ::
-  Either Error RqType
-mkListRequest =
-  Right ListRq
+mkListRequest :: Either Error RqType
+mkListRequest = Right ListRq
 
-mkErrorResponse ::
-  Error ->
-  Response
+mkErrorResponse :: Error -> Response
 mkErrorResponse UnknownRoute =
   Res.resp404 PlainText "Unknown Route"
 mkErrorResponse EmptyCommentText =

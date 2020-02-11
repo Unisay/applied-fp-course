@@ -21,19 +21,15 @@ import Level07.Types
 
 -- We have some sane defaults that we can always rely on, so define them using
 -- our PartialConf.
-defaultConf ::
-  PartialConf
-defaultConf =
-  PartialConf
+defaultConf :: PartialConf
+defaultConf = PartialConf
     (pure (Last $ Port 3000))
     (pure (Last $ DBFilePath "app_db.db"))
 
 -- We need something that will take our PartialConf and see if can finally build
 -- a complete Conf record. Also we need to highlight any missing config values
 -- by providing the relevant error.
-makeConfig ::
-  PartialConf ->
-  Either ConfigError Conf
+makeConfig :: PartialConf -> Either ConfigError Conf
 makeConfig pc =
   Conf
     <$> lastToEither MissingPort pcPort

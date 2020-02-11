@@ -98,4 +98,3 @@ deleteTopic FirstAppDB {dbConn} topic = runDB pure db
   where
     db = Sql.execute dbConn "DELETE FROM comments WHERE topic = ?" args
     args = Sql.Only (getTopic topic)
--- Go to 'src/Level05/Core.hs' next.

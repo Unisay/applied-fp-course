@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Level07.AppM
   ( AppM (..),
@@ -12,6 +13,7 @@ module Level07.AppM
   )
 where
 
+import Control.Applicative (liftA2)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Reader (MonadReader (..))
@@ -60,43 +62,45 @@ newtype AppM e a
 type App = AppM Error
 
 runApp :: App a -> Env -> IO (Either Error a)
-runApp = error "runAppM not implemented"
+runApp = runAppM
 
 instance Applicative (AppM e) where
   pure :: a -> AppM e a
-  pure = error "pure for AppM e not implemented"
+  pure = AppM . pure . pure . pure
 
   (<*>) :: AppM e (a -> b) -> AppM e a -> AppM e b
-  (<*>) = error "spaceship for AppM e not implemented"
+  AppM f <*> AppM a = AppM (liftA2 (<*>) <$> f <*> a)
 
 instance Monad (AppM e) where
   (>>=) :: AppM e a -> (a -> AppM e b) -> AppM e b
-  (>>=) = error "bind for AppM e not implemented"
+  AppM m >>= f = AppM $ \e ->
+    m e >>= either (pure . Left) ((`runAppM` e) . f)
 
 instance MonadError e (AppM e) where
   throwError :: e -> AppM e a
-  throwError = error "throwError for AppM e not implemented"
+  throwError = AppM . pure . pure . Left
 
   catchError :: AppM e a -> (e -> AppM e a) -> AppM e a
-  catchError = error "catchError for AppM e not implemented"
+  catchError (AppM m) f = AppM $ \e ->
+    m e >>= either (flip runAppM e . f) (pure . pure)
 
 instance MonadReader Env (AppM e) where
   -- Return the current Env from the AppM.
   ask :: AppM e Env
-  ask = error "ask for AppM e not implemented"
+  ask = AppM (pure . pure)
 
   -- Run a (AppM e) inside of the current one using a modified Env value.
   local :: (Env -> Env) -> AppM e a -> AppM e a
-  local = error "local for AppM e not implemented"
+  local l (AppM f) = AppM (f . l)
 
   -- This will run a function on the current Env and return the result.
   reader :: (Env -> a) -> AppM e a
-  reader = error "reader for AppM e not implemented"
+  reader = AppM . ((pure . pure) .)
 
 instance MonadIO (AppM e) where
   -- Take a type of 'IO a' and lift it into our (AppM e).
   liftIO :: IO a -> AppM e a
-  liftIO = error "liftIO for AppM not implemented"
+  liftIO = AppM . pure . fmap pure
 
 -- | This is a helper function that will `lift` an Either value into our new AppM
 -- by applying `throwError` to the Left value, and using `pure` to lift the
@@ -105,5 +109,5 @@ instance MonadIO (AppM e) where
 -- throwError :: MonadError e m => e -> m a
 -- pure :: Applicative m => a -> m a
 liftEither :: Either e a -> AppM e a
-liftEither = error "throwLeft not implemented"
+liftEither = AppM . const . pure
 -- Move on to ``src/Level07/DB.hs`` after this

@@ -69,18 +69,12 @@ initDB fp = Sql.runDBAction $ do
     createTableQ =
       "CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, topic TEXT, comment TEXT, time INTEGER)"
 
-runDB ::
-  (a -> Either Error b) ->
-  IO a ->
-  App b
+runDB :: (a -> Either Error b) -> IO a -> App b
 runDB f a = do
   r <- liftIO $ first DBError <$> Sql.runDBAction a
   liftEither $ f =<< r
 
-getComments ::
-  FirstAppDB ->
-  Topic ->
-  App [Comment]
+getComments :: FirstAppDB -> Topic -> App [Comment]
 getComments db t = do
   -- Write the query with an icky string and remember your placeholders!
   let q = "SELECT id,topic,comment,time FROM comments WHERE topic = ?"
@@ -89,11 +83,7 @@ getComments db t = do
   -- outside world. Checking again for things like empty Topic or CommentText values.
   runDB (traverse fromDBComment) $ Sql.query (dbConn db) q (Sql.Only . getTopic $ t)
 
-addCommentToTopic ::
-  FirstAppDB ->
-  Topic ->
-  CommentText ->
-  App ()
+addCommentToTopic :: FirstAppDB -> Topic -> CommentText -> App ()
 addCommentToTopic db t c = do
   -- Record the time this comment was created.
   nowish <- liftIO getCurrentTime
@@ -112,17 +102,12 @@ addCommentToTopic db t c = do
 -- An alternative is to write a returning query to get the Id of the DBComment
 -- we've created. We're being lazy (hah!) for now, so assume awesome and move on.
 
-getTopics ::
-  FirstAppDB ->
-  App [Topic]
+getTopics :: FirstAppDB -> App [Topic]
 getTopics db =
   let q = "SELECT DISTINCT topic FROM comments"
    in runDB (traverse (mkTopic . Sql.fromOnly)) $ Sql.query_ (dbConn db) q
 
-deleteTopic ::
-  FirstAppDB ->
-  Topic ->
-  App ()
+deleteTopic :: FirstAppDB -> Topic -> App ()
 deleteTopic db t =
   let q = "DELETE FROM comments WHERE topic = ?"
    in runDB Right $ Sql.execute (dbConn db) q (Sql.Only . getTopic $ t)
