@@ -33,8 +33,7 @@ import Text.Read (readEither)
 -- This is an example of using the ``optparse-applicative`` package to build our command line
 -- parser. As this particular problem is fraught with silly dangers, we appreciate someone else
 -- having eaten this gremlin on our behalf.
-commandLineParser ::
-  IO PartialConf
+commandLineParser :: IO PartialConf
 commandLineParser =
   let mods =
         fullDesc
@@ -43,14 +42,11 @@ commandLineParser =
    in execParser $ info (helper <*> partialConfParser) mods
 
 -- Combine the smaller parsers into our larger ``PartialConf`` type.
-partialConfParser ::
-  Parser PartialConf
-partialConfParser =
-  PartialConf <$> portParser <*> dbFilePathParser
+partialConfParser :: Parser PartialConf
+partialConfParser = PartialConf <$> portParser <*> dbFilePathParser
 
 -- Parse the Port value off the command line args and into a Last wrapper.
-portParser ::
-  Parser (Maybe (Last Port))
+portParser :: Parser (Maybe (Last Port))
 portParser =
   let mods =
         long "port"
@@ -62,8 +58,7 @@ portParser =
    in fmap Last <$> optional (option portReader mods)
 
 -- Parse the DBFilePath from the input string into our type and into a Last wrapper.
-dbFilePathParser ::
-  Parser (Maybe (Last DBFilePath))
+dbFilePathParser :: Parser (Maybe (Last DBFilePath))
 dbFilePathParser =
   let mods =
         long "db-filepath"
