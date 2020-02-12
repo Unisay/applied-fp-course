@@ -1,3 +1,5 @@
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Level07.Types
@@ -29,26 +31,22 @@ where
 import Data.ByteString (ByteString)
 import Data.Functor.Contravariant ((>$<))
 import Data.Semigroup (Last (Last), Semigroup ((<>)))
+import Data.String (IsString)
 import Data.Text (pack)
 import Data.Time (UTCTime)
 import qualified Data.Time.Format as TF
 import Database.SQLite.Simple (Connection)
 import Database.SQLite.SimpleErrors.Types (SQLiteResponse)
 import GHC.Word (Word16)
-import Level07.DB.Types (DBComment (dbCommentComment, dbCommentId, dbCommentTime, dbCommentTopic))
+import Level07.DB.Types (DBComment (..))
 import Level07.Types.CommentText
   ( CommentText,
     encodeCommentText,
     getCommentText,
     mkCommentText,
   )
-import Level07.Types.Error (Error (DBError, EmptyCommentText, EmptyTopic, UnknownRoute))
-import Level07.Types.Topic
-  ( Topic,
-    encodeTopic,
-    getTopic,
-    mkTopic,
-  )
+import Level07.Types.Error (Error (..))
+import Level07.Types.Topic (Topic, encodeTopic, getTopic, mkTopic)
 import System.IO.Error (IOError)
 import Waargonaut.Decode (CursorHistory, Decoder)
 import qualified Waargonaut.Decode as D
@@ -88,9 +86,7 @@ encodeComment = E.mapLikeObj $ \c ->
 -- we would be okay with showing someone. However unlikely it may be, this is a
 -- nice method for separating out the back and front end of a web app and
 -- providing greater guarantees about data cleanliness.
-fromDBComment ::
-  DBComment ->
-  Either Error Comment
+fromDBComment :: DBComment -> Either Error Comment
 fromDBComment dbc =
   Comment (CommentId $ dbCommentId dbc)
     <$> (mkTopic $ dbCommentTopic dbc)
@@ -101,6 +97,7 @@ data RqType
   = AddRq Topic CommentText
   | ViewRq Topic
   | ListRq
+  deriving (Show)
 
 -- Provide a type to list our response content types so we don't try to
 -- do the wrong thing with what we meant to be used as text or JSON etc.
@@ -108,9 +105,7 @@ data ContentType
   = PlainText
   | JSON
 
-renderContentType ::
-  ContentType ->
-  ByteString
+renderContentType :: ContentType -> ByteString
 renderContentType PlainText = "text/plain"
 renderContentType JSON = "application/json"
 
@@ -122,24 +117,17 @@ renderContentType JSON = "application/json"
 -- record and this lets you specify an unwrapping function at the same time. Which
 -- technique you choose is a matter for your specific needs and preference.
 --
-newtype Port
-  = Port
-      {getPort :: Word16}
+newtype Port = Port {getPort :: Word16}
   deriving (Eq, Show)
 
-newtype DBFilePath
-  = DBFilePath
-      {getDBFilePath :: FilePath}
-  deriving (Eq, Show)
+newtype DBFilePath = DBFilePath {getDBFilePath :: FilePath}
+  deriving stock (Show)
+  deriving newtype (Eq, IsString)
 
 -- The ``Conf`` type will need:
 -- - A customisable port number: ``Port``
 -- - A filepath for our SQLite database: ``DBFilePath``
-data Conf
-  = Conf
-      { port :: Port,
-        dbFilePath :: DBFilePath
-      }
+data Conf = Conf {port :: Port, dbFilePath :: DBFilePath}
   deriving (Eq)
 
 -- We're storing our Port as a Word16 to be more precise and prevent invalid
@@ -221,7 +209,4 @@ partialConfDecoder =
 -- our database queries. This also allows things to change over time without
 -- having to rewrite all of the functions that need to interact with DB related
 -- things in different ways.
-newtype FirstAppDB
-  = FirstAppDB
-      { dbConn :: Connection
-      }
+newtype FirstAppDB = FirstAppDB {dbConn :: Connection}

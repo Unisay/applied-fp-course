@@ -103,10 +103,10 @@ prepareAppReqs = do
 -- the function for this so include the 'runApp' with the Env.
 app :: Env -> Application
 app env rq cb =
-  runApp (handleRequest =<< mkRequest rq) env >>= cb . handleRespErr
+  runApp (handleRequest =<< mkRequest rq) env >>= handleRespErr >>= cb
   where
-    handleRespErr :: Either Error Response -> Response
-    handleRespErr = either mkErrorResponse id
+    handleRespErr :: Either Error Response -> IO Response
+    handleRespErr = either mkErrorResponse pure
 
 handleRequest :: RqType -> App Response
 handleRequest rqType = case rqType of
@@ -136,13 +136,12 @@ mkViewRequest = fmap ViewRq . mkTopic
 mkListRequest :: Either Error RqType
 mkListRequest = Right ListRq
 
-mkErrorResponse :: Error -> Response
+mkErrorResponse :: Error -> IO Response
 mkErrorResponse UnknownRoute =
-  Res.resp404 PlainText "Unknown Route"
+  pure $ Res.resp404 PlainText "Unknown Route"
 mkErrorResponse EmptyCommentText =
-  Res.resp400 PlainText "Empty Comment"
+  pure $ Res.resp400 PlainText "Empty Comment"
 mkErrorResponse EmptyTopic =
-  Res.resp400 PlainText "Empty Topic"
-mkErrorResponse (DBError _) =
-  -- Be a sensible developer and don't leak your DB errors over the internet.
-  Res.resp500 PlainText "OH NOES"
+  pure $ Res.resp400 PlainText "Empty Topic"
+mkErrorResponse (DBError err) =
+  Res.resp500 PlainText "OH NOES" <$ print err
